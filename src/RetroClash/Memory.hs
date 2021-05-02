@@ -9,7 +9,9 @@ module RetroClash.Memory
     , romFromVec, romFromFile
     , ram0, ramFromFile
     , port, port_
+
     , connect
+    , override
 
     , from
     , matchLeft, matchRight
@@ -115,6 +117,17 @@ connect (Handle rd compAddr) = Addressing $ do
     (addr, _) <- ask
     let masked = [| enable (delay False $ isJust <$> $addr) $(varE rd) |]
     tell (mempty, Map.singleton compAddr [addr], [masked])
+
+override
+    :: ExpQ
+    -> Addressing addr ()
+override sig = Addressing $ do
+    rd <- lift . lift $ newName "rd"
+    let decs = [d| $(varP rd) = weak $sig |]
+    tell (decs, [varE rd], mempty)
+
+weak :: (Functor f) => f (Maybe a) -> f (Maybe (Maybe a))
+weak = fmap (maybe Nothing (Just . Just))
 
 matchAddr
     :: ExpQ {-(addr -> Maybe addr')-}
