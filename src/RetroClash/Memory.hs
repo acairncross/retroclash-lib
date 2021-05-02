@@ -79,13 +79,13 @@ compile
     -> Component
 compile addressing addr wr = do
     (x, (decs, conns, rds)) <-
-        runWriterT $ runReaderT (runAddressing addressing) ([| Just <$> $addr |], wr)
+        runWriterT $ runReaderT (runAddressing addressing) (addr, wr)
 
     let compAddrs = [ [d| $(varP nm) = muxA $(listE addrs) |]
                     | (nm, addrs) <- Map.toList conns
                     ]
     decs <- mconcat (decs:compAddrs)
-    letE (pure <$> decs) [| (muxA $(listE rds) .<| 0, $(backpane x)) |]
+    letE (pure <$> decs) [| (muxA $(listE rds) .<| Just 0, $(backpane x)) |]
 
 memoryMap
     :: forall addr a. (Backpane a)
@@ -158,7 +158,7 @@ romFromVec
     -> ExpQ {-(Vec n dat)-}
     -> Addressing addr (Handle (Index n))
 romFromVec size xs = readWrite_ $ \addr _wr ->
-    [| rom $xs (bitCoerce . fromJustX <$> $addr) |]
+    [| fmap Just $ rom $xs (bitCoerce . fromJustX <$> $addr) |]
 
 romFromFile
     :: (1 <= n)
@@ -166,21 +166,21 @@ romFromFile
     -> ExpQ
     -> Addressing addr (Handle (Index n))
 romFromFile size fileName = readWrite_ $ \addr _wr ->
-    [| fmap unpack $ romFilePow2 $fileName (bitCoerce . fromJustX <$> $addr) |]
+    [| fmap (Just . unpack) $ romFilePow2 $fileName (bitCoerce . fromJustX <$> $addr) |]
 
 ram0
     :: (1 <= n)
     => SNat n
     -> Addressing addr (Handle (Index n))
 ram0 size = readWrite_ $ \addr wr ->
-    [| blockRam1 NoClearOnReset size 0 (fromJustX <$> $addr) (liftA2 (,) <$> $addr <*> $wr) |]
+    [| fmap Just $ blockRam1 NoClearOnReset size 0 (fromJustX <$> $addr) (liftA2 (,) <$> $addr <*> $wr) |]
 
 ramFromFile
     :: SNat n
     -> ExpQ {- FilePath -}
     -> Addressing addr (Handle (Index n))
 ramFromFile size fileName = readWrite_ $ \addr wr ->
-    [| packRam (blockRamFile size $fileName)
+    [| fmap Just $ packRam (blockRamFile size $fileName)
            (fromJustX <$> $addr)
            (liftA2 (,) <$> $addr <*> $wr)
     |]
