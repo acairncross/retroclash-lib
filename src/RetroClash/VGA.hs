@@ -121,7 +121,7 @@ vgaOut vgaSync@VGASync{..} rgb = VGAOut{..}
     blank = mux (not <$> vgaDE) (pure (0, 0, 0))
 
 -- | VGA 640*480@60Hz, 25.175 MHz pixel clock
-vga640x480at60 :: VGATimings (HzToPeriod 25_175_000) 640 480
+vga640x480at60 :: VGATimings (HzToPeriod 25_000_000) 640 480
 vga640x480at60 = VGATimings
     { vgaHorizTiming = VGATiming Low (SNat @16) (SNat @96) (SNat @48)
     , vgaVertTiming  = VGATiming Low (SNat @11) (SNat @2)  (SNat @31)
