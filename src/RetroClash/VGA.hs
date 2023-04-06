@@ -1,7 +1,8 @@
-{-# LANGUAGE ScopedTypeVariables, NumericUnderscores, PartialTypeSignatures #-}
+{-# LANGUAGE ScopedTypeVariables, NumericUnderscores #-}
 {-# LANGUAGE DuplicateRecordFields, RecordWildCards, ApplicativeDo #-}
 {-# LANGUAGE ExistentialQuantification, StandaloneDeriving #-}
-{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE UndecidableInstances #-}
 module RetroClash.VGA
     ( VGASync(..)
     , VGADriver(..)
@@ -17,6 +18,7 @@ module RetroClash.VGA
     ) where
 
 import Clash.Prelude
+import Clash.Class.HasDomain
 import RetroClash.Clock
 import RetroClash.Utils
 import Data.Maybe (isJust)
@@ -33,6 +35,9 @@ data VGAOut dom r g b = VGAOut
     , vgaG     :: "GREEN" ::: Signal dom (Unsigned g)
     , vgaB     :: "BLUE" ::: Signal dom (Unsigned b)
     }
+
+type instance HasDomain dom1 (VGAOut dom2 r g b) = DomEq dom1 dom2
+type instance TryDomain t (VGAOut dom r g b) = Found dom
 
 data VGADriver dom w h = VGADriver
     { vgaSync :: VGASync dom
@@ -73,20 +78,28 @@ end :: (KnownNat back) => VGAState visible front pulse back -> Bool
 end (BackPorch cnt) | cnt == maxBound = True
 end _ = False
 
+type Step a = a -> a
+
 data VGACounter visible
     = forall front pulse back. (KnownNat front, KnownNat pulse, KnownNat back)
-    => VGACounter (VGAState visible front pulse back -> VGAState visible front pulse back)
+    => VGACounter (Step (VGAState visible front pulse back))
+
+mkVGACounter
+    :: SNat front -> SNat pulse -> SNat back
+    -> Step (VGAState visible front pulse back)
+    -> VGACounter visible
+mkVGACounter SNat SNat SNat = VGACounter
 
 vgaCounter :: (KnownNat visible) => VGATiming visible -> VGACounter visible
-vgaCounter (VGATiming _ front@SNat pulse@SNat back@SNat) = VGACounter next
+vgaCounter (VGATiming _ front@SNat pulse@SNat back@SNat) =
+    mkVGACounter front pulse back $ \case
+        Visible cnt    -> count Visible    FrontPorch cnt
+        FrontPorch cnt -> count FrontPorch SyncPulse  cnt
+        SyncPulse cnt  -> count SyncPulse  BackPorch  cnt
+        BackPorch cnt  -> count BackPorch  Visible    cnt
   where
-    next (Visible cnt) = maybe (FrontPorch $ the front 0) Visible $ succIdx cnt
-    next (FrontPorch cnt) = maybe (SyncPulse $ the pulse 0) FrontPorch $ succIdx cnt
-    next (SyncPulse cnt) = maybe (BackPorch $ the back 0) SyncPulse $ succIdx cnt
-    next (BackPorch cnt) = maybe (Visible 0) BackPorch $ succIdx cnt
-
-    the :: SNat n -> Index n -> Index n
-    the _ = id
+    count :: (KnownNat n, KnownNat m) => (Index n -> a) -> (Index m -> a) -> Index n -> a
+    count this next = maybe (next 0) this . succIdx
 
 vgaDriver
     :: (HiddenClockResetEnable dom, KnownNat w, KnownNat h)

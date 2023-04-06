@@ -1,4 +1,4 @@
-resolver: clash-HEAD.yaml
+resolver: clash-1.4.6.yaml
 
 extra-deps:
-  - barbies-2.0.1.0
+  - monoidal-containers-0.6.0.1
